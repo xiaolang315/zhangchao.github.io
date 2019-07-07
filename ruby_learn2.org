@@ -1,0 +1,110 @@
+#+Author:zhangchao
+#+TITLE:ruby learn 2
+#+OPTIONS: ^:nil
+ 本来应该很近的两篇博客，被突如其来的出差打断了。感叹笔记还是要在当时深有感触时，写来才会得心应手。还是按照需求的递进来回忆好了。
+* 迭代三
+  这个迭代需求要求实现向后转动作，移动多步的动作。这在当时比赛时，是2个需求里的，毕竟做过一次了，改动不大，且比较类似，就放在一起做了。
+  先来看测试：
+  向后转的动作测试起来还是比较直接的。顺便回顾一下需求1要求起始位置是（0，0，north）
+  #+BEGIN_SRC ruby
+  def test_turn_arround
+    assert((Robot.new.onCmd($arrand) == Position.new(Point.new(0,0),$south)))
+  end
+  #+END_SRC
+  但是移动多步的用力第一次写出来，是这个样子的
+  #+BEGIN_SRC ruby
+  def test_forward_n
+    assert((Robot.new.onCmd(forward_n(2)) == Position.new(Point.new(0,2),$north)))
+  end
+  #+END_SRC
+  本着完成最小功能集合的原则，向后转自然是左转或者右转两次了。通过lambda的实现简单漂亮
+  #+BEGIN_SRC ruby
+  $arrand = lambda{|pos| return $turnLeft.call($turnLeft.call(pos))}
+  #+END_SRC
+  当再开始写移动多次时，发现了什么？向后转是执行2次的左转，移动多步时执行n次的前进或后退，本质上是重复的不是吗？这时作为懒惰的程序员，想办法消除重复的时候到了。我想到的就是repeat的这样一个函数，接受n和cmd的入参，执行n次的cmd。很好的抽象。
+  repeat长什么样子？
+  #+BEGIN_SRC ruby
+def repeat(n, cmd)
+  lambda {|pos|
+  (1 .. n) .each do
+    pos = cmd.call(pos)
+  end
+  }
+end
+  #+END_SRC
+  看看arrand变成了什么样子
+#+BEGIN_SRC ruby
+def arrand()
+  repeat(2, $turnLeft);
+end
+#+END_SRC
+  更加简单了有木有，感叹于lambda的强大。好像半天没实现移动几步的需求，我们再来看看，有了repeat，我们根本不需要单独的实现个forward_n了好吗？修改一下测试：
+#+BEGIN_SRC ruby
+def test_forward_n
+    assert((Robot.new.onCmd(repeat(2,$forward))) ==  Position.new(Point.new(0,2), $north))
+end
+#+END_SRC
+  可见良好的设计思路和有效的重复消除，绝对是可以大大降低新需求开发的工作量的。
+
+* 迭代四
+  最后的需求是这个题里最难的，同样我把之前的2个需求合并在这一次里了，可能会少了一点2个需求接踵而来引起的变化，其实也能看出它们引入的难度和我解决的一些想法。这个需求要求，可以接受一系列的指令，例如连续的2个指令：右转＋前进，这个系列的指令可以无限多。第二个需求就是之前提到的重复指令，难点在于，重复指令时可以接受刚才的系列指令的。
+  拿到这个题，当时我是很头疼啦，倒不是实现起来有多么困难，首先也是大家都能想到的我先创建个cmds的变量，然后一个个把指令压栈进去，提供相同抽象的接口，当robot调用这个cmds的call时，内部将之前缓存的指令全部执行一遍，这当然无可厚非。只是我们当时是比赛的性质，怎样能提供更好的表达力？更漂亮，出彩，还是很需要花点心思的。
+  当时有人用c＋＋11的初始化列表搞出来，确实不错。而我另辟蹊径，采用lisp的思想，我将这个cmds接受2个参数（head，tail）而head和tail又都可以是cmds。是不是有点递归到味道，看起来也很有函数式的味道,
+#+begin_src c
+  trail( trail( turnLeft
+              , forward)
+       , turnRight);
+#+end_src
+  但这次用ruby写，不想用类似的方式了，想换个思路，看是否还能有如此漂亮的表达力。为了保持我们的开闭，接口方面当然要和之前的cmd们对齐，也就是这次的trail也必须是个lambda
+  实现出来的函数接受一组命令，返回一个lambda表达式，这个表达式能把之前的这一组命令都调动起来。测试如下：
+  #+BEGIN_SRC  ruby
+  def test_trail_cmd
+    assert((Robot.new.onCmd(trail([$turnRight, $forward]))) == Position.new(Point.new(1,0),$east))
+  end
+
+  #+END_SRC
+实现如下：
+#+BEGIN_SRC ruby
+def trail(cmds)
+  lambda{|pos|
+  cmds.each do |cmd|
+    pos = cmd.call(pos)
+  end
+  return pos
+  }
+end
+#+END_SRC
+运行通过，大功告成？还差临门一脚，乍看起来这个trail和repeat的组合应用应该没有问题。实践出真章，来2个比较复杂的测试：
+#+BEGIN_SRC ruby
+  def test_trail_and_repeat_cmd
+    assert((Robot.new.onCmd(trail([repeat(2,$turnRight), $forward]))) == Position.new(Point.new(0,-1),$south))
+  end
+
+  def test_repeat_trail_and_repeat_cmd
+    assert((Robot.new.onCmd(repeat(2,trail([repeat(2,$turnRight), $forward])))) == Position.new(Point.new(0,0),$north))
+  end
+#+END_SRC
+ 果然运行不通过，对于ruby这样的动态语言，并没有c++等静态语言里很强的接口约束关系，之前的repeat的实现相当于并不满足我们最开始对接口的设计，没有返回一个新的pos。这样的接口导致了它的无法复用性。修改成如下的方法，自然通过所有测试
+#+BEGIN_SRC ruby
+def repeat(n, cmd)
+  lambda {|pos|
+  (1 .. n) .each do
+    pos = cmd.call(pos)
+  end
+  return pos
+  }
+end
+#+END_SRC
+  这里就不得不提到ruby里几种类似的处理方式，proc，lamdba，block，仿函数，其中只有仿函数和lambda是可以有返回值的。也是最接近静态语言接口设计方面的应用。
+  天真的以为到这里就算完了吗？我们都知道优秀（懒惰）的程序员是不允许有丝毫的重复的，那么能看出来我们的repeat和trail有什么重复吗？pos，有人要说了，这点重复也算？这要看怎么看了，这2个事物本质上是不是存在关联性。为什么我觉得repeat和trail重复呢？仅仅是根据pos的重复吗？当然不是了。我们从语义上看，trail是不限个数的不同动作的组合，而repeat是指定个数动作相同的组合，当我们这样描述时，不难发现repeat是trail的一个特例，看看我把repeat实现成什么样子：
+#+BEGIN_SRC ruby
+def repeat(n, cmd)
+  cmds = []
+  (1 .. n) .each do
+    cmds << cmd
+  end
+  trail(cmds)
+end
+#+END_SRC
+  正如之前描述，我们根据repeat的特性。构造了一组cmds传给trail，这样的好处是什么？我们之所以要消除重复，就是为了减少关注点，关注点越少，你修改代码时错误的几率也就越小。按照现在的实现，所有的组合性动作，归根结底都是trail，那么当接口发生变化时，我们只需要修改一处，不是吗？软件设计无处不在，小到一个函数的设计，无不体现我们对认知领域抽像的能力。
+

@@ -1,0 +1,109 @@
+#+Author: zhangchao
+#+TITLE:program_options
+#+OPTIONS: ^:nil
+最近一直忙着做一个关于xunit开源的项目，自己领的任务卡是提供运行选项。当然首先想起boost提供的program_options,down下代码来一看功能当然没问题了，但一旦使用就得引入整个boost库，得不偿失啊。于是决定学着boost实现自己的版本。
+* 需求整理
+先看看我们需要点什么功能，"--"的选项肯定是要支持的，比如：--help能表示"help"的选项。"-"当然也需要支持，比如：-h也能表示"help"这样的选项，看boost代码还支持将-hf识别为"-h""-f"这样的选项，这么好的功能当然还需要保留了。
+除了能识别选项是否存在，当然还得具有能识别带有值的选项。"--help=value","-h=value"这样的功能也得具备，短名字在boost里是以"-h value"这样的形式来的，既然自己搞觉得还是统一的表达方式比较好。
+* 测试设计
+需求明确了，测试当然也就自然而然浮现了，TDD嘛，用例先行。除了之前提到的设计正常的用例，反例也要有所覆盖。
+
+#+BEGIN_SRC shell
+[----------] 8 tests from OptionTest
+[ RUN      ] OptionTest::--help
+[       OK ] OptionTest::--help(197 us)
+[ RUN      ] OptionTest::--filter=1
+[       OK ] OptionTest::--filter=1(68 us)
+[ RUN      ] OptionTest::invalid option
+[       OK ] OptionTest::invalid option(62 us)
+[ RUN      ] OptionTest::short prefix with no value
+[       OK ] OptionTest::short prefix with no value(89 us)
+[ RUN      ] OptionTest::'-hf' == '-h -f'
+[       OK ] OptionTest::'-hf' == '-h -f'(66 us)
+[ RUN      ] OptionTest::'-f=1' parse as 'filter' with value '1'
+[       OK ] OptionTest::'-f=1' parse as 'filter' with value '1'(63 us)
+[ RUN      ] OptionTest::'--f' is not valid
+[       OK ] OptionTest::'--f' is not valid(61805 us)
+[ RUN      ] OptionTest::'-hf=1' parse as 'help' and 'filter' with value '1'
+[       OK ] OptionTest::'-hf=1' parse as 'help' and 'filter' with value '1'(186 us)
+[----------] 8 tests from OptionTest
+#+END_SRC
+
+* 接口设计
+之前boost的program_option使用时需要先定义描述，运行解析，定义存储参数列表，再调用存储函数存进去。。。
+也许是boost当初面临的需求比较复杂吧，我们这里可定时不需要啦，只需要最简单的解析出参数即可。
+因此将解析和存储的功能整合到了variablesMap里，提供一个解析接口完成从命令行参数到选项的一步到位。访问借口除了保留之前的［］的方式，增加了has接口，用来直接判断是否有这个选项
+整理后的接口如下：
+#+BEGIN_SRC c
+
+struct  VariablesMap : std::map<std::string, std::string>
+{
+    static VariablesMap&  getInstance();
+
+    void parseArgs(int argc, const char** const argv
+                   , const OptionsDescription& desc);
+
+    const std::string& operator[](const std::string& name) const;
+
+    void clear(); 
+    bool has(const std::string& name) const;
+
+private:
+    using super = std::map<std::string, std::string>;
+    void store(const ParsedOptions& options);
+};
+
+
+#+END_SRC
+
+选项描述类定义：修改描述借口为接受以map的方式添加，保留了<<的输出方式，放弃了printf，毕竟c＋＋嘛
+#+BEGIN_SRC c
+
+struct OptionsDescription
+{
+    OptionsDescription(const std::string& caption);
+
+    void add(std::map<std::string, std::string>&& args);
+
+    friend std::ostream& operator<<(std::ostream& os, 
+                                    const OptionsDescription& desc);
+    const OptionDescription* find(const std::string& name) const;
+
+private:
+    enum { default_line_length = 80};
+    using DescPtr =  std::shared_ptr<OptionDescription>;
+
+    std::string m_caption;
+    std::vector<DescPtr > m_options;
+};
+
+#+END_SRC
+
+使用方面通过以下代码即可：
+#+BEGIN_SRC c
+
+OptionsDescription desc {"Allowed options"};
+desc.add({{"help,h", "show all option"}});
+VariablesMap& varMap = VariablesMap::getInstance();
+varMap.parseArgs(options.size(), argv, desc);
+
+#+END_SRC
+
+打印格式也做了自己的重新定义，一切从简，仿照unix风格
+
+#+BEGIN_SRC shell
+
+================================================================================
+usage: options [--color|-c] [--filter|-f] [--help|-h] 
+================================================================================
+  color               output has color or not                 
+  filter              set filter                              
+  help                help message                            
+
+#+END_SRC
+
+* 总结
+代码贡献在https://gitlab.com/horance/l0-infra  里的options，这是自己第一次参与开源项目。整体还是很有成就感的。
+boost功能设计很不错，但实现方式上应该是很久没有人维护过了，很多可以优化的代码。当然也取决于自己的需求比较简单，用户比较单一不用太考虑夸平台的事情。
+本项目的初衷是提供可定制的运行选项，因此砍掉了诸如读文件，宽字符，模糊匹配以及值解析等功能。当然随着需求增加也许还会增加进来。
+本次开发使用了一些c＋＋11的方式，之前总停留在书本，终于在实践中应用才能感觉11语法带来的简洁和高效。

@@ -1,0 +1,105 @@
+#+Author:zhangchao
+#+TITLE:ruby learn
+  最近心血来潮想学习ruby，对我来说，学习的最好方法莫过于实践。于是翻出之前参加竞赛的题目，当时是用c＋＋来实现的，这次准备在用ruby实现一下，体验一下语言届的天上与地下的差别
+* 迭代一
+  这个题目是实现一个扫地机器人，可以控制它进行移动转向，迭代性质的，第一个迭代的需求是提供左转右转的功能，只限东南西北的转向，默认是北向，坐标（0，0）。转向时坐标不发生变化。
+  二话不说，作为多年程序员，再加上之前看过一些ruby的语法，上手就来。robot对象肯定是要有的，基于之前做过的经验，position对象也必须有了用来比较位置的。之前本来想上来就用据说很牛的bdd来搞测试用例，再多次尝试Rspec后，还是放弃了。老实的用XUnit的方式吧，自己还是比较熟悉这样的用例，想来作为ruby新兵，还是有很多路要走，步子不能太大。
+#+BEGIN_SRC ruby
+  def test_turn_left
+    assert((Robot.new.onCmd($turnLeft) == Position.new(Point.new(0,0),$west)))
+  end
+
+  def test_turn_right
+    assert((Robot.new.onCmd($turnRight) == Position.new(Point.new(0,0),$east)))
+  end
+
+#+END_SRC
+  此处考虑测试简单，就明知故犯的把robot在oncmd之后直接和position比较了，工作中还是要避免这样的歧义。第一个需求很好搞定，加上之前本已用c＋＋实现过一遍，所以上来就直接commond模式了。
+#+BEGIN_SRC ruby
+class Robot
+  def initialize()
+    @position = Position.new(0，0, $north)
+  end
+  
+  def onCmd(cmd)
+    @position = cmd.call(@position)
+    return @position; 
+  end
+end
+#+END_SRC
+  方向和动作均设计为单例，就这个需求来讲定义为简单的枚举，转向即对枚举的数值进行加减。
+代码十分简单不做赘述。
+* 迭代二
+  迭代二的需求是支持robot的移动，当然必须在方向的基础上进行，比如当前是面朝北，那么向前和向后移动就是在y轴上加减。
+  需求看起来不难，但这确实是比较考究设计的地方，如何能将移动和方向进行很好的结合需要好好考虑的。当时在用c＋＋做这个需求的时候，尝试了很多种方式，其实立刻想到好的方法并不现实，也不符合我们极限编程的理念，我们首先要快速的驱动出可工作的代码，将用例通过，再进行重构。先上用例
+#+BEGIN_SRC ruby
+  def test_move_forward
+    assert((Robot.new.onCmd($forward) == Position.new(Point.new(0,1),$north)))
+  end
+
+  def test_move_backward
+    assert((Robot.new.onCmd($backward) == Position.new(Point.new(0,-1),$north)))
+  end
+#+END_SRC
+  从用例的重新设计可以看出，这里point这个概念要抽出了，Position由direct和point两个概念组成，并被设计成值对象。direct对point的影响设计为对x，y轴的作用偏移量
+#+BEGIN_SRC ruby
+class Point
+  attr_reader:x
+  attr_reader:y
+  def initialize(x, y)
+    @x = x;
+    @y = y;
+  end
+
+  def ==(rhs)
+    return @x == rhs.x && @y == rhs.y;
+  end
+end
+
+class Direct
+  attr_reader:index
+  def initialize(index,  x, y)
+    @index = index
+    @x_offset = x
+    @y_offset = y
+  end
+
+  def forward(point)
+    return Point.new(point.x + @x_offset, point.y + @y_offset)
+  end
+
+  def backward(point)
+    return Point.new(point.x - @x_offset, point.y - @y_offset)
+  end
+
+end
+
+#+END_SRC
+  point自不必问，提供初始化，可读和相等的判断接口；direct设计为提供刻度的自身的方位索引，和可移动操作后形成新的point。如此设计四个方向可设计为以下这样的表：
+#+BEGIN_SRC ruby
+
+$north = Direct.new(0,0,1);
+$east = Direct.new(1,1,0);
+$south = Direct.new(2,0,-1);
+$west = Direct.new(3,-1,0);
+$directs = [
+  $north, $east, $south, $west
+]
+
+#+END_SRC
+  根据这张表重新设计需求1的转向接口，并实现需求2的移动接口
+#+BEGIN_SRC ruby
+
+$turnLeft = lambda{|pos| return Position.new(pos.point, $directs[(pos.direct.index + 3) %4]);}
+
+$turnRight =lambda{|pos| return Position.new(pos.point, $directs[(pos.direct.index + 1) %4])}
+
+$forward = lambda{|pos|   return  Position.new(pos.direct.forward(pos.point),pos.direct)
+}
+
+$backward = lambda{|pos| return Position.new(pos.direct.backward(pos.point),pos.direct)}
+
+#+END_SRC
+  本来设计为函数对象的，但既然用ruby，也要尝试一些函数式编程的影子，lambda走起，当然在c＋＋11中也引入了。每个动作的结果都会反回一个新的position对象，这样也是与当时c＋＋实现时大不相同大地方。相比大部分从c，c++走来的兄弟们都深有体会，这种时候我们一定会考虑指针或应用的方式传递，以减小拷贝的开销。这样的思维就会导致我们在设计上陷入僵局，说来惭愧，这次用ruby实现时，还在搜怎么传递引用。。。人家ruby动态语言有gc，根本不考虑这个。这样一来发现反倒简化了设计。
+  在设计动作的实现时，新Position每次执行完动作产生一个是新的Position，这远比一个动作修改原有的position更符合语义理解。point的移动一定是基于方向的，转向时的point保持不变，移动时方向不变的概念在lambda里一目了然，根据当前位置所面临的方向得到移动后新️的坐标，更是合情合理。direct只有4种，设计为4个单例。
+  今天先把前2个迭代的内容搞完，后面继续学习。总结一啊，ruby的学习方面对lambda，block，proc，函数对象等的区别有了认识，在多次犯错调试后，也终于技术@和$的区别，学会了类对象的制度属性的生命。对设计的思路也开始跳出c++的影子。

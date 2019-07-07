@@ -1,0 +1,131 @@
+#+Author:zhangchao
+#+TITLE:learn org
+  好记性不如烂笔头！已经到了不得不服老的阶段，几天没摸的org操作已然忘得差不多。几经纠结后觉得用org写blog，虽然没有直推和管理的工具，直接贴HTML也是可以接受的选择。
+先把基本操作做个记录。只记录自己感觉有用的部分。
+
+* org 快捷键
+** 展开 
+   引用网上看到的一个高手言论，找不到出处了，见谅。org模式只要记住tab就可以了,它递归的展开
+** 调整目录
+   * M-S-left 目录降级(< in spacemacs)
+   * M-S-right 目录升级(> in spacemacs)
+   * M-RET/C-c RET 同级增加项(C-c RET/o)
+   * M-up/M-down 交换相同层级 
+** 输出
+    * C-c C-e 会列出所有可以输出的文件类型
+个人比较常用的是以下两种
+    * C-c C-e b 输出到 HTML 文件
+    * C-c C-e l 输出到 pdf 文件(依赖latex)
+* org 常用编辑操作
+** 表格
+
+*** 表格编辑
+   org里创建表格非常方便，键入如下内容，可以生成对应的表格：\\
+   #+BEGIN_SRC  org
+  | name      | age |
+  |-----------+-----|
+  | zhangchao |  19 |
+  | wangw     |  20 |
+  | lisi      |  29 |
+   #+END_SRC 
+效果如下：\\
+   #+CAPTION: 表格的名字
+  | name      | age |
+  |-----------+-----|
+  | zhangchao |  19 |
+  | wangw     |  20 |
+  | lisi      |  29 |
+  #+LABEL: tbl:table1
+
+*** 表格快捷键
+   * C-c C-c对齐表格\\
+** 枚举列表 
+   #+BEGIN_SRC  org
+   * name1
+   * name2
+   * name3
+   #+END_SRC
+效果如下：\\
+   * name1
+   * name2
+   * name3
+** 字体
+#+BEGIN_SRC org
+   *blod*\\
+   _you_\\
+   /you/\\
+   +you+\\
+   H_2 O\\
+   E=mc^2 \\
+   =git=
+#+END_SRC
+
+效果：
+   *blod*\\
+   _you_\\
+   /you/\\
+   +you+\\
+   H_2 O\\
+   E=mc^2 \\
+   =git=
+** list
+#+BEGIN_SRC org
+   1. first-l1
+   2. sec-l1
+      1. first-l2
+      2. sec-l2
+   3. third-l1
+#+END_SRC
+效果：\\
+   1. first-l1
+   2. sec-l1
+      1. first-l2
+      2. sec-l2
+   3. third-l1
+** 分割线
+#+BEGIN_SRC org 
+-------
+#+END_SRC
+
+   --------
+
+** 脚注
+   脚注1[1]\\
+   脚注2[fn:bla]
+
+** 强制换行
+   使用以下方法可以强制换行\\
+#+BEGIN_SRC org
+\\
+#+END_SRC
+** 插入时间
+   1. use c-c > open calendar
+   2. use c-c < insert date to current cursor
+   3. <2014-06-07 
+
+** 引用
+   代码块可以使用“< ”字符 加tab的方式快速输入例如：\\
+" #+BEGIN\_EXAMPL "和" #+END\_EXAPML " ,用来添加引用, 使用< + e +tab\\
+	#+BEGIN_EXAMPLE
+	example
+	#+END_EXAMPLE
+" #+BEGIN\_SRC " 和" #+END\_SRC " 用来给引用代码并着色, 使用< + s + tab\\
+	#+BEGIN_SRC c
+	int i;
+    printf i;
+	#+END_SRC
+
+* org 一些需要设置的地方
+ * 输出为markdown格式,做完如下设置后，才能在输出列表里有mk的选项
+ #+BEGIN_EXAMPLE
+ (eval-after-load "org"
+    '(require 'ox-md nil t))
+ #+END_EXAMPLE
+ *  markdown 模式中文乱码
+ #+BEGIN_EXAMPLE
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+ #+END_EXAMPLE
+ *  设计自动换行需要设置 truncate-lines 模式
+	 
+[1] 这是脚注1的解释
+[fn:bla] 这个是脚注2的

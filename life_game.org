@@ -1,0 +1,184 @@
+#+Author:zhangchao
+#+TITLE:life game
+之前参加了公司内部的教练认证，第一轮就是这道经典的生命游戏，具体需求就不罗列了，网上一搜一大片.在基本需求上新增的需求就是，根据输入文件(以'0','1'表示)，打印出最终迭代结果文件（以' ', '$'）
+，用c++实现，代码量不小，重在学习嘛。全部代码上传git，在此总结自己的收获。此次还有特殊的要求就是不能使用ifelse等条件判断，也给本次代码提高了不小的难度。
+* 测试用例
+** 测试用例设计
+   1.根据生命游戏的基本需求设计基于3*3的九种基本用例, 
+ * FtWorld\_3\_3.should\_DEAD\_board\_when\_1\_neighbor
+ * FtWorld\_3\_3.should\_STAY\_board\_when\_2\_neighbor
+ * FtWorld\_3\_3.should\_ALIVE\_board\_when\_3\_neighbor
+ * FtWorld\_3\_3.should\_DEAD\_board\_when\_4\_neighbor
+ * FtWorld\_3\_3.should\_DEAD\_board\_when\_5\_neighbor
+ * FtWorld\_3\_3.should\_DEAD\_board\_when\_6\_neighbor
+ * FtWorld\_3\_3.should\_DEAD\_board\_when\_7\_neighbor
+ * FtWorld\_3\_3.should\_DEAD\_board\_when\_8\_neighbor
+\\
+   2.设计略微复杂场景基于4*4的用例
+     1. 一次迭代得到下一代结果
+     2. 多次迭代得到稳定结果
+   3.满足需求的用例20*20的用例
+* 设计思路
+** 接口设计:
+ * world的创建需要提供原始图和大小
+ * world需要能够演进到下一代
+ * world还需要可以输出
+\\   
+
+#+BEGIN_SRC c
+
+DEFINE_ROLE(World)
+{
+    ABSTRACT(void startWith(const char*
+            , const WorldSize&));
+    ABSTRACT(void nextGeneration());
+    ABSTRACT(char* output());
+};
+
+#+END_SRC
+** world设计
+   需要能够自行迭代，必须具有A,B两个世界交换输出，互为源和目标。于是产生worldgroup类, 由于该类属于内部实现，放在worldFactory
+** cell设计
+   只提供状态迁移接口，根据给定的邻居情况，跃迁到下一个状态。cell只保存当前自身的状态。
+** 特殊需求设计
+   针对不能使用if-else的条件，主要的瓶颈就在于边界判断方面。为解决边界判断问题，我讲world设计为比初始世界大一圈的world，让边界都为0，使不论在任何位置
+都能取到有效的邻居信息。其他关于cell状态的判断，通过表驱动的方式解决。
+* 重构
+** 测试重构
+   重构后的测试用例具有更强的表达能力，让人一目了然运行结果。
+#+BEGIN_EXAMPLE
+FtWorld_3_3.should_DEAD_board_when_8_neighbor
+***world start with :***
+111
+111
+111
+***after evolve 1 times:***
+***world would be :***
+101
+000
+101
+#+END_EXAMPLE
+** 设计重构
+*** 输入输出重构
+   随着实现的增加，测试的扩展，代码的重复变得越发刺眼。主要体现在原始数据的输入，
+测试用例的输入，测试用例的输出，最终打印的输出，变化的这是细胞生与死的表现形式，于是
+对接口做了如下的重新设计：
+#+BEGIN_SRC c
+
+DEFINE_ROLE(World)
+{
+    ABSTRACT(void startWith(const char*
+            , const CellStateChars&
+            , const WorldSize&));
+    ABSTRACT(void nextGeneration());
+    ABSTRACT(void output(std::ostream&, const CellStateChars&));
+};
+#+END_SRC
+  CellStateChars设计为生命状态接口，由用户选择输入和输出的方式，
+
+#+BEGIN_SRC c
+template<char ALIVE_CHAR, char DEAD_CHAR>
+struct GenericCellStateChars : CellStateChars
+{
+    OVERRIDE(char getAliveChar() const) {return ALIVE_CHAR;}
+    OVERRIDE(char getDeadChar() const) {return DEAD_CHAR;};
+    OVERRIDE(CellState getState(char state) const)
+    {
+        static CellState states[] = {DEAD, ALIVE};
+        return states[ALIVE_CHAR == state];
+    };
+};
+
+static GenericCellStateChars<'1', '0'> input_chars;
+static GenericCellStateChars<1, 0> ft_chars;
+static GenericCellStateChars<'$', ' '> output_chars;
+
+#+END_SRC
+兼顾了测试和正式代码，
+不必为测试增加新的接口。并采用ostream的输出方式，通过ofstream来输出最终结果，而通过
+stringstream来进行测试校验。
+  原始数据输入代码：
+#+BEGIN_SRC c
+    World& world = WorldFactory::create();
+    world.startWith(init, input_chars, GenericWorldSize<20,20>());
+#+END_SRC
+  最终结果输出：cout输出到控制台
+#+BEGIN_SRC c
+    ofstream of(str);
+    world.output(of, output_chars);
+    world.output(cout, output_chars);
+    of.close();
+#+END_SRC
+  测试结果的校验
+#+BEGIN_SRC c
+    bool isEq(World& ret, const char* right)
+    {
+        std::ostringstream ss;
+        ret.output(ss, ft_chars);
+
+        const char*  left = ss.str().c_str();
+
+        int offset = 0;
+        for(int i = 0; i< ROW * COL ; i++)
+        {
+            if(left[(i+offset)] == '\n') offset++;//filter the \n
+            if(left[(i+offset)] != right [i])
+                return false;
+        }
+        return true;
+    }
+#+END_SRC
+*** world重构
+    第一版的world几乎承担了所有的职责，而world对于cell来说只提供周边cell信息，故针对world抽象出neighbor接口，由单个World实现，提供计算邻居信息的方法。
+#+BEGIN_SRC c
+DEFINE_ROLE(Neighbor)
+{
+    ABSTRACT(int countNeighbors(const Position&));
+    ABSTRACT(Cell& getSrcCell(const Position&));
+};
+#+END_SRC
+*** cell重构
+    进一步分离职责，位置信息应该固话到cell对象里。针对cell抽象出了position接口，提供位置信息，由于world一旦创建，可达信息也随之固定
+故抽象出可达邻居打bitmap来避免每次去计算邻居信息。
+
+#+BEGIN_SRC c
+struct CellObject : Cell
+{
+    CellObject ();
+
+private:
+    OVERRIDE(void init(const Position&, CellState));
+    OVERRIDE(bool isAlive() const);
+    OVERRIDE(bool isEndl() const);
+    OVERRIDE(void evolve(Neighbor&));
+    OVERRIDE(CellState getState() const);
+
+private:
+    CellState state;
+    Position pos;
+};
+#+END_SRC
+
+#+BEGIN_SRC c
+struct Position
+{
+    Position();
+    Position(int index, const WorldSize&);
+
+    bool isEndl() const;
+    int getIndex() const;
+    int getCol() const;
+    ArivalMap getArivalMap() const;
+
+private:
+    int index;
+    int col;
+    ArivalMap arival;
+};
+#+END_SRC    
+* 总结
+  当前完成的结果必然不能作为最终结果，还有很大改进空间，遗留了以下痛点：
+1. 关于邻居可达关系的计算还是过于复杂，为了消除ifelse使用的表驱动，尽管通过宏多态的方式提高表现力，但是仍然太复杂了。
+2. 为了结果输出的统一，在类和接口设计上作出了妥协，存在过度设计接口。
+\\
+自我感觉重复的消除上还是做得不错的，后续有时间可以继续重构，也尝试用其他语言来实现一下。
