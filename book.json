@@ -1,0 +1,50 @@
+{
+    "title": "blog",
+    "description": "",
+    "author": "zhangchao",
+    "output.name": "site",
+    "language": "zh-hans",
+    "gitbook": "3.2.3",
+    "root": ".",
+    "links": {
+        "sidebar": {
+            "Github": "https://github.com/xiaolang315/zhangchao.github.io"
+        }
+    },
+    "plugins": [
+        "code",
+        "-search",
+        "search-pro",
+        "github",
+        "splitter",
+        "tbfed-pagefooter",
+        "-donate",
+        "-sharing",
+        "- sharing-plus",
+        "prism",
+        "-highlight",
+        "styles-less",
+        "toggle-chapters",
+        "multipart",
+        "ancre-navigation"
+    ],
+    "pluginsConfig": {
+        "github": {
+            "url": "https://github.com/xiaolang315"
+        },
+        "code": {
+            "copyButtons": true
+        },
+        "tbfed-pagefooter": {
+            "copyright": "Copyright © 2021"
+        },
+        "prism": {
+            "css": [
+                "prismjs/themes/prism-dark.css"
+            ],
+            "lang": {
+                "flow": "typescript"
+            }
+        }
+    }
+}
